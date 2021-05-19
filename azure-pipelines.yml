@@ -1,0 +1,62 @@
+trigger:
+- master
+
+pool:
+  vmImage: 'windows-latest'
+
+variables:
+  solution: '**/*.sln'
+  buildPlatform: 'Any CPU'
+  buildConfiguration: 'Release'
+
+steps:
+- task: NuGetToolInstaller@1
+
+# Restore
+- task: NuGetCommand@2
+  displayName: 'NuGet restore'
+  inputs:
+    restoreSolution: '$(solution)'
+
+- task: gitversion/setup@0
+  displayName: Install GitVersion
+  inputs:
+    versionSpec: '5.x'
+
+- task: gitversion/execute@0
+  displayName: Determine Version
+  inputs:
+    useConfigFile: true
+    configFilePath: 'GitVersion.yml'
+- script: echo current version is $(GitVersion.SemVer)
+  displayName: 'Display calculated version'
+
+# Build
+- task: VSBuild@1
+  displayName: 'Build solution **\*.sln'
+  inputs:
+    solution: '$(solution)'
+    platform: '$(buildPlatform)'
+    configuration: '$(buildConfiguration)'
+
+# Package
+- task: NuGetCommand@2
+  displayName: 'NuGet pack'
+  inputs:
+    command: 'pack'
+    packagesToPack: '**/UPN.Mail/UPN.Mail.csproj'
+    versioningScheme: byEnvVar
+    versionEnvVar: 'GitVersion.SemVer'
+    #versionEnvVar: $(GitVersion.SemVer)
+    #versionEnvVar: 'PackageVersion'
+    #versioningScheme: off
+
+# Publish
+- task: NuGetCommand@2
+  displayName: 'NuGet push'
+  inputs:
+    command: 'push'
+    packagesToPush: '$(Build.ArtifactStagingDirectory)/**/*.nupkg;!$(Build.ArtifactStagingDirectory)/**/*.symbols.nupkg'
+    nuGetFeedType: 'internal'
+    publishVstsFeed: '4aa1329c-f247-4790-9bd5-8beeb0601517'
+    allowPackageConflicts: true
